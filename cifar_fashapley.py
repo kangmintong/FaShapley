@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import torchvision.transforms as transforms
 import torch.autograd as autograd
 from torch.nn.parameter import Parameter
 
@@ -51,7 +50,7 @@ class SubnetConv(nn.Conv2d):
             groups,
             bias,
         )
-        self.popup_scores = torch.ones((self.weight.shape[0],self.weight.shape[1],self.weight.shape[2],self.weight.shape[3]),requires_grad=False).to(device)
+        # self.popup_scores = torch.ones((self.weight.shape[0],self.weight.shape[1],self.weight.shape[2],self.weight.shape[3]),requires_grad=False).cuda()
         self.weight.requires_grad = False
         if self.bias is not None:
             self.bias.requires_grad = False
@@ -63,9 +62,10 @@ class SubnetConv(nn.Conv2d):
 
     def forward(self, x):
         # Get the subnetwork by sorting the scores.
-        adj = GetSubnet.apply(self.popup_scores.abs(), self.k)
+        # adj = GetSubnet.apply(self.popup_scores.abs(), self.k)
         # Use only the subnetwork in the forward pass.
-        self.w = self.weight * adj
+        # self.w = self.weight * adj
+        self.w = self.weight
         x = F.conv2d(
             x, self.w, self.bias, self.stride, self.padding, self.dilation, self.groups
         )
@@ -82,9 +82,7 @@ class SubnetLinear(nn.Linear):
         # nn.init.kaiming_uniform_(self.popup_scores, a=math.sqrt(5))
         #self.popup_scores[:] = 1.0
 
-        self.popup_scores = torch.ones(
-            (self.weight.shape[0], self.weight.shape[1]),
-            requires_grad=False).to(device)
+        # self.popup_scores = torch.ones((self.weight.shape[0], self.weight.shape[1]),requires_grad=False).cuda()
 
         self.weight.requires_grad = False
         self.bias.requires_grad = False
@@ -97,16 +95,18 @@ class SubnetLinear(nn.Linear):
 
     def forward(self, x):
         # Get the subnetwork by sorting the scores.
-        adj = GetSubnet.apply(self.popup_scores.abs(), self.k)
+        # adj = GetSubnet.apply(self.popup_scores.abs(), self.k)
 
         # Use only the subnetwork in the forward pass.
-        self.w = self.weight * adj
+        # self.w = self.weight * adj
+        self.w = self.weight
+
         x = F.linear(x, self.w, self.bias)
         return x
 
 class Flatten(nn.Module):
     def forward(self, input):
-        return input.view(input.size(0), -1)
+        return input.reshape(input.size(0), -1)
 
 class Net(nn.Module):
     """
@@ -115,12 +115,14 @@ class Net(nn.Module):
 
     def __init__(self) -> None:
         super(Net, self).__init__()
+        conv_layer = SubnetConv
+        linear_layer = SubnetLinear
         self.conv1 = conv_layer(3, 16, 4, stride=2, padding=1)
-        self.relu1 = nn.relu()
+        self.relu1 = nn.ReLU()
         self.conv2 = conv_layer(16, 32, 4, stride=2, padding=1)
-        self.relu2 = nn.relu()
+        self.relu2 = nn.ReLU()
         self.flat = Flatten()
-        self.fc1 = linear_layer(32 * 8 * 8, 100),
+        self.fc1 = linear_layer(32 * 8 * 8, 100)
         self.relu3 = nn.ReLU()
         self.fc2 = linear_layer(100, 10)
 
